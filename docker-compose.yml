@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16.14-alpine
+    container_name: smartlogix-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DATABASE}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+    volumes:
+      - smartlogix-postgres-data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    networks:
+      - smartlogix-network
+
+volumes:
+  smartlogix-postgres-data:
+    name: smartlogix-postgres-data
+
+networks:
+  smartlogix-network:
+    name: smartlogix-network
+    driver: bridge
