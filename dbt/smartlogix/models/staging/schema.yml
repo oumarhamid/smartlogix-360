@@ -1,0 +1,124 @@
+version: 2
+
+models:
+  - name: stg_delivery_fact
+    description: >
+      Vue standardisée de la table de faits Gold des livraisons.
+
+    columns:
+      - name: order_id
+        description: Clé métier unique de la livraison.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: delivery_date
+        description: Date analytique de la livraison.
+        data_tests:
+          - not_null
+
+      - name: city
+        description: Ville nettoyée.
+        data_tests:
+          - not_null
+
+      - name: courier_id
+        description: Identifiant du coursier.
+        data_tests:
+          - not_null
+
+      - name: delivery_duration_status
+        description: Statut analytique de la durée.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - normal
+                  - zero_or_negative
+                  - long
+                  - missing
+
+      - name: gps_quality_status
+        description: Statut analytique des coordonnées GPS.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - complete
+                  - missing_or_invalid_accept
+                  - missing_or_invalid_delivery
+                  - missing_or_invalid_both
+
+      - name: delivery_count
+        description: Mesure additive valant un.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - 1
+                quote: false
+
+  - name: stg_courier_daily_performance
+    description: >
+      Vue standardisée des performances quotidiennes par coursier.
+
+    columns:
+      - name: courier_daily_key
+        description: Clé technique unique coursier-jour-ville.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: delivery_date
+        data_tests:
+          - not_null
+
+      - name: city
+        data_tests:
+          - not_null
+
+      - name: courier_id
+        data_tests:
+          - not_null
+
+      - name: orders_total
+        data_tests:
+          - not_null
+
+      - name: sla_compliance_rate
+        data_tests:
+          - not_null
+
+  - name: stg_city_daily_performance
+    description: >
+      Vue standardisée des performances quotidiennes par ville.
+
+    columns:
+      - name: city_daily_key
+        description: Clé technique unique ville-région-jour.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: delivery_date
+        data_tests:
+          - not_null
+
+      - name: city
+        data_tests:
+          - not_null
+
+      - name: orders_total
+        data_tests:
+          - not_null
+
+      - name: unique_couriers
+        data_tests:
+          - not_null
+
+      - name: sla_compliance_rate
+        data_tests:
+          - not_null

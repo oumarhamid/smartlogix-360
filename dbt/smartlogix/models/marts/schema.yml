@@ -1,0 +1,77 @@
+version: 2
+
+models:
+  - name: mart_delivery_overview
+    description: Indicateurs quotidiens de livraison par ville.
+
+    columns:
+      - name: delivery_overview_key
+        data_tests:
+          - not_null
+          - unique
+
+      - name: delivery_date
+        data_tests:
+          - not_null
+
+      - name: city
+        data_tests:
+          - not_null
+
+      - name: orders_total
+        data_tests:
+          - not_null
+
+      - name: sla_compliance_rate
+        data_tests:
+          - not_null
+
+  - name: mart_courier_ranking
+    description: Classement global des coursiers par ville.
+
+    columns:
+      - name: courier_ranking_key
+        data_tests:
+          - not_null
+          - unique
+
+      - name: courier_id
+        data_tests:
+          - not_null
+
+      - name: city
+        data_tests:
+          - not_null
+
+      - name: orders_total
+        data_tests:
+          - not_null
+
+      - name: city_rank
+        data_tests:
+          - not_null
+
+  - name: mart_city_performance
+    description: Indicateurs consolidés par ville.
+
+    columns:
+      - name: city_performance_key
+        data_tests:
+          - not_null
+          - unique
+
+      - name: city
+        data_tests:
+          - not_null
+
+      - name: orders_total
+        data_tests:
+          - not_null
+
+      - name: active_days
+        data_tests:
+          - not_null
+
+      - name: sla_compliance_rate
+        data_tests:
+          - not_null

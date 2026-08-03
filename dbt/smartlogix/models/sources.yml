@@ -1,0 +1,154 @@
+version: 2
+
+sources:
+  - name: analytics
+    description: >
+      Tables analytiques Gold produites par le pipeline Python
+      SmartLogix 360 puis chargées dans PostgreSQL.
+
+    database: smartlogix
+    schema: analytics
+    loader: smartlogix_python_pipeline
+
+    loaded_at_field: _gold_processed_at
+
+    freshness:
+      warn_after:
+        count: 24
+        period: hour
+
+      error_after:
+        count: 72
+        period: hour
+
+    tables:
+      - name: delivery_fact
+        description: >
+          Table de faits Gold contenant une ligne par livraison.
+
+        columns:
+          - name: order_id
+            description: Identifiant unique de la livraison.
+            data_tests:
+              - not_null
+              - unique
+
+          - name: delivery_date
+            description: Date analytique de livraison.
+            data_tests:
+              - not_null
+
+          - name: city
+            description: Ville de la livraison.
+            data_tests:
+              - not_null
+
+          - name: courier_id
+            description: Identifiant du coursier.
+            data_tests:
+              - not_null
+
+          - name: delivery_duration_status
+            description: Classification de la durée.
+            data_tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values:
+                      - normal
+                      - zero_or_negative
+                      - long
+                      - missing
+
+          - name: gps_quality_status
+            description: Statut de disponibilité des coordonnées GPS.
+            data_tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values:
+                      - complete
+                      - missing_or_invalid_accept
+                      - missing_or_invalid_delivery
+                      - missing_or_invalid_both
+
+          - name: delivery_count
+            description: Mesure additive valant toujours un.
+            data_tests:
+              - not_null
+              - accepted_values:
+                  arguments:
+                    values:
+                      - 1
+                    quote: false
+
+          - name: _gold_processed_at
+            description: Date technique de production Gold.
+            data_tests:
+              - not_null
+
+      - name: courier_daily_performance
+        description: >
+          Indicateurs quotidiens agrégés par ville et coursier.
+
+        columns:
+          - name: delivery_date
+            data_tests:
+              - not_null
+
+          - name: region_id
+            data_tests:
+              - not_null
+
+          - name: city
+            data_tests:
+              - not_null
+
+          - name: courier_id
+            data_tests:
+              - not_null
+
+          - name: orders_total
+            data_tests:
+              - not_null
+
+          - name: sla_compliance_rate
+            data_tests:
+              - not_null
+
+          - name: _gold_processed_at
+            data_tests:
+              - not_null
+
+      - name: city_daily_performance
+        description: >
+          Indicateurs quotidiens agrégés par ville et région.
+
+        columns:
+          - name: delivery_date
+            data_tests:
+              - not_null
+
+          - name: region_id
+            data_tests:
+              - not_null
+
+          - name: city
+            data_tests:
+              - not_null
+
+          - name: orders_total
+            data_tests:
+              - not_null
+
+          - name: unique_couriers
+            data_tests:
+              - not_null
+
+          - name: sla_compliance_rate
+            data_tests:
+              - not_null
+
+          - name: _gold_processed_at
+            data_tests:
+              - not_null

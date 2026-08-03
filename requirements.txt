@@ -1,15 +1,14 @@
-pandas
-pyarrow
-polars
-pydantic
-pydantic-settings
-python-dotenv
-pyyaml
-requests
-tenacity
-structlog
-pandera
-faker
-huggingface-hub
-sqlalchemy>=2.0,<3.0
-psycopg[binary]>=3.2,<4.0
+smartlogix:
+  target: dev
+
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      port: 5433
+      user: smartlogix
+      pass: change_me
+      dbname: smartlogix
+      schema: dbt_analytics
+      threads: 4
+      connect_timeout: 10

@@ -1,0 +1,44 @@
+name: smartlogix
+version: "1.0.0"
+config-version: 2
+
+profile: smartlogix
+
+model-paths:
+  - models
+
+seed-paths:
+  - seeds
+
+snapshot-paths:
+  - snapshots
+
+analysis-paths:
+  - analyses
+
+macro-paths:
+  - macros
+
+test-paths:
+  - tests
+
+target-path: target
+
+clean-targets:
+  - target
+  - dbt_packages
+  - logs
+
+models:
+  smartlogix:
+    +persist_docs:
+      relation: true
+      columns: true
+
+    staging:
+      +materialized: view
+      +schema: staging
+
+    marts:
+      +materialized: table
+      +schema: marts
