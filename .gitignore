@@ -104,3 +104,7 @@ volumes/
 '@ | Set-Content -Path .gitignore -Encoding utf8
 # Python package metadata
 *.egg-info/
+# Local Lakehouse generated data
+data/bronze/**
+data/silver/**
+data/gold/**

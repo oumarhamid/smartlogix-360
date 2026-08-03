@@ -1,3 +1,9 @@
+from smartlogix.ingestion.lade.bronze import (
+    BRONZE_WARNING_COLUMNS,
+    LaDeBronzeBuilder,
+    LaDeBronzeBuildError,
+    LaDeBronzeResult,
+)
 from smartlogix.ingestion.lade.downloader import (
     LaDeDownloadedFile,
     LaDeDownloadError,
@@ -28,7 +34,11 @@ from smartlogix.ingestion.lade.repository import (
 )
 
 __all__ = [
+    "BRONZE_WARNING_COLUMNS",
     "DELIVERY_COLUMNS",
+    "LaDeBronzeBuilder",
+    "LaDeBronzeBuildError",
+    "LaDeBronzeResult",
     "LaDeColumnProfile",
     "LaDeCsvProfile",
     "LaDeCsvProfiler",
