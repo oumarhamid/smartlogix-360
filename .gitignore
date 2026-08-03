@@ -1,0 +1,106 @@
+@'
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Environnements virtuels
+.venv/
+venv/
+env/
+
+# Variables sensibles
+.env
+.env.*
+!.env.example
+secrets/
+*.secret
+
+# IDE
+.vscode/
+.idea/
+
+# Système
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/**
+!logs/.gitkeep
+
+# Données locales et volumineuses
+data/raw/**
+data/generated/**
+data/processed/**
+data/quarantine/**
+data/samples/**
+
+# Conserver les fichiers .gitkeep
+!data/raw/**/
+!data/raw/**/.gitkeep
+!data/generated/**/
+!data/generated/**/.gitkeep
+!data/processed/**/
+!data/processed/**/.gitkeep
+!data/quarantine/**/
+!data/quarantine/**/.gitkeep
+!data/samples/**/
+!data/samples/**/.gitkeep
+
+# Spark
+spark-warehouse/
+metastore_db/
+derby.log
+.checkpoints/
+checkpoint/
+checkpoints/
+
+# Airflow
+airflow/logs/
+airflow/airflow.db
+airflow/airflow.cfg
+airflow/webserver_config.py
+
+# dbt
+dbt/**/target/
+dbt/**/logs/
+dbt/**/dbt_packages/
+
+# Java / Spring Boot
+spring-api/target/
+*.jar
+*.war
+
+# React / Node
+react-dashboard/node_modules/
+react-dashboard/dist/
+react-dashboard/build/
+node_modules/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Docker
+docker-data/
+volumes/
+
+# Fichiers temporaires
+*.tmp
+*.temp
+*.bak
+'@ | Set-Content -Path .gitignore -Encoding utf8
+# Python package metadata
+*.egg-info/

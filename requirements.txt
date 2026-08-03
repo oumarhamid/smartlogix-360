@@ -1,0 +1,15 @@
+pandas
+pyarrow
+polars
+pydantic
+pydantic-settings
+python-dotenv
+pyyaml
+requests
+httpx
+tenacity
+structlog
+pandera
+faker
+tqdm
+huggingface-hub
