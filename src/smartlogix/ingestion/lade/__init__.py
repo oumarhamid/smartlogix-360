@@ -1,3 +1,9 @@
+from smartlogix.ingestion.lade.downloader import (
+    LaDeDownloadedFile,
+    LaDeDownloadError,
+    LaDeDownloadValidationError,
+    LaDeFileDownloader,
+)
 from smartlogix.ingestion.lade.models import (
     LaDeRemoteFile,
     LaDeRepositoryInventory,
@@ -8,8 +14,12 @@ from smartlogix.ingestion.lade.repository import (
 )
 
 __all__ = [
+    "LaDeDownloadedFile",
+    "LaDeDownloadError",
+    "LaDeDownloadValidationError",
+    "LaDeFileDownloader",
     "LaDeRemoteFile",
-    "LaDeRepositoryInventory",
     "LaDeRepositoryInspectionError",
     "LaDeRepositoryInspector",
+    "LaDeRepositoryInventory",
 ]
