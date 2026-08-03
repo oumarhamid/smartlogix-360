@@ -32,10 +32,19 @@ from smartlogix.ingestion.lade.repository import (
     LaDeRepositoryInspectionError,
     LaDeRepositoryInspector,
 )
+from smartlogix.ingestion.lade.silver import (
+    SILVER_REQUIRED_COLUMNS,
+    SILVER_VERSION,
+    LaDeSilverBuilder,
+    LaDeSilverBuildError,
+    LaDeSilverResult,
+)
 
 __all__ = [
     "BRONZE_WARNING_COLUMNS",
     "DELIVERY_COLUMNS",
+    "SILVER_REQUIRED_COLUMNS",
+    "SILVER_VERSION",
     "LaDeBronzeBuilder",
     "LaDeBronzeBuildError",
     "LaDeBronzeResult",
@@ -54,6 +63,9 @@ __all__ = [
     "LaDeRepositoryInspectionError",
     "LaDeRepositoryInspector",
     "LaDeRepositoryInventory",
+    "LaDeSilverBuilder",
+    "LaDeSilverBuildError",
+    "LaDeSilverResult",
     "build_lade_delivery_schema",
     "read_lade_delivery_csv",
 ]
