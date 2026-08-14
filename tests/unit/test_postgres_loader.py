@@ -106,8 +106,6 @@ def build_city_daily() -> pd.DataFrame:
 def build_mock_loader() -> PostgresGoldLoader:
     """Construit un chargeur avec moteur simulé."""
 
-    engine = MagicMock()
-
     return PostgresGoldLoader(
         database_url=(
             "postgresql+psycopg://"
@@ -115,7 +113,7 @@ def build_mock_loader() -> PostgresGoldLoader:
         ),
         schema_name="analytics",
         chunksize=100,
-        engine=engine,
+        engine=MagicMock(),
     )
 
 
@@ -181,6 +179,99 @@ def test_unknown_table_is_rejected() -> None:
             dataframe=build_delivery_fact(),
             table_name="unknown_table",
         )
+
+
+def test_copy_dataframe_uses_psycopg_copy() -> None:
+    loader = build_mock_loader()
+    dataframe = build_delivery_fact()
+
+    connection = MagicMock()
+    cursor = MagicMock()
+    copy = MagicMock()
+
+    connection.connection.cursor.return_value.__enter__.return_value = (
+        cursor
+    )
+
+    cursor.copy.return_value.__enter__.return_value = (
+        copy
+    )
+
+    loader._copy_dataframe(
+        connection=connection,
+        dataframe=dataframe,
+        table_name="delivery_fact",
+    )
+
+    copy_sql = (
+        cursor.copy.call_args.args[0]
+    )
+
+    payload = (
+        copy.write.call_args.args[0]
+    )
+
+    assert (
+        'COPY "analytics"."delivery_fact"'
+        in copy_sql
+    )
+
+    assert "FORMAT CSV" in copy_sql
+
+    assert isinstance(
+        payload,
+        bytes,
+    )
+
+    assert b"Jilin" in payload
+
+    assert copy.write.call_count == 1
+
+
+def test_write_dataframe_drops_indexes_before_copy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loader = build_mock_loader()
+    dataframe = build_delivery_fact()
+
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        loader,
+        "_drop_indexes",
+        lambda **kwargs: calls.append(
+            "drop_indexes"
+        ),
+    )
+
+    monkeypatch.setattr(
+        loader,
+        "_truncate_table",
+        lambda **kwargs: calls.append(
+            "truncate"
+        ),
+    )
+
+    monkeypatch.setattr(
+        loader,
+        "_copy_dataframe",
+        lambda **kwargs: calls.append(
+            "copy"
+        ),
+    )
+
+    loader._write_dataframe(
+        connection=MagicMock(),
+        dataframe=dataframe,
+        table_name="delivery_fact",
+        table_exists=True,
+    )
+
+    assert calls == [
+        "drop_indexes",
+        "truncate",
+        "copy",
+    ]
 
 
 def test_load_dataframe_returns_summary(
@@ -307,7 +398,10 @@ def test_load_gold_tables_returns_three_results(
     assert result.database_name == "smartlogix"
     assert result.database_user == "smartlogix"
 
-    assert result.delivery_fact.row_count == 2
+    assert (
+        result.delivery_fact.row_count
+        == 2
+    )
 
     assert (
         result.courier_daily_performance.row_count

@@ -3,15 +3,12 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from io import StringIO
 from typing import Any
 
 import pandas as pd
-from sqlalchemy import (
-    Engine,
-    create_engine,
-    inspect,
-    text,
-)
+from psycopg import Error as PsycopgError
+from sqlalchemy import Engine, create_engine, inspect, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -19,9 +16,10 @@ from smartlogix.common import get_logger
 
 logger = get_logger(__name__)
 
-POSTGRES_IDENTIFIER_PATTERN = re.compile(
-    r"^[a-z_][a-z0-9_]*$"
-)
+POSTGRES_IDENTIFIER_PATTERN = re.compile(r"^[a-z_][a-z0-9_]*$")
+
+COPY_NULL_SENTINEL = "__SMARTLOGIX_NULL_7F9E2C5A__"
+
 
 GOLD_POSTGRES_TABLES = {
     "delivery_fact": {
@@ -106,9 +104,7 @@ GOLD_POSTGRES_TABLES = {
             ),
             (
                 "ix_courier_daily_sla",
-                (
-                    "sla_compliance_rate",
-                ),
+                ("sla_compliance_rate",),
                 False,
             ),
         ),
@@ -141,9 +137,7 @@ GOLD_POSTGRES_TABLES = {
             ),
             (
                 "ix_city_daily_sla",
-                (
-                    "sla_compliance_rate",
-                ),
+                ("sla_compliance_rate",),
                 False,
             ),
         ),
@@ -207,7 +201,7 @@ class PostgresGoldLoadResult:
 
 
 class PostgresGoldLoader:
-    """Charge les tables Gold dans PostgreSQL."""
+    """Charge les tables Gold dans PostgreSQL avec COPY."""
 
     def __init__(
         self,
@@ -279,6 +273,19 @@ class PostgresGoldLoader:
             f"{self._quote_identifier(table_name)}"
         )
 
+    def _qualified_index_name(
+        self,
+        index_name: str,
+    ) -> str:
+        """Retourne le nom SQL pleinement qualifié d'un index."""
+
+        self._validate_identifier(index_name)
+
+        return (
+            f"{self._quote_identifier(self.schema_name)}."
+            f"{self._quote_identifier(index_name)}"
+        )
+
     def _validate_dataframe(
         self,
         dataframe: pd.DataFrame,
@@ -302,9 +309,7 @@ class PostgresGoldLoader:
         )
 
         required_columns = set(
-            table_configuration[
-                "required_columns"
-            ]
+            table_configuration["required_columns"]
         )
 
         missing_columns = required_columns.difference(
@@ -322,12 +327,12 @@ class PostgresGoldLoader:
             )
 
         unique_columns = list(
-            table_configuration[
-                "unique_columns"
-            ]
+            table_configuration["unique_columns"]
         )
 
-        if dataframe[unique_columns].isna().any().any():
+        if dataframe[
+            unique_columns
+        ].isna().any().any():
             raise PostgresGoldLoadError(
                 f"La clé de {table_name} contient "
                 "des valeurs nulles."
@@ -341,22 +346,29 @@ class PostgresGoldLoader:
                 "des doublons."
             )
 
+        for column in dataframe.columns:
+            self._validate_identifier(
+                str(column)
+            )
+
     def test_connection(
         self,
     ) -> tuple[str, str]:
-        """Teste la connexion et retourne la base et l'utilisateur."""
+        """Teste la connexion PostgreSQL."""
 
         try:
             with self.engine.connect() as connection:
-                database_name, database_user = (
-                    connection.execute(
-                        text(
-                            "SELECT "
-                            "current_database(), "
-                            "current_user"
-                        )
-                    ).one()
-                )
+                (
+                    database_name,
+                    database_user,
+                ) = connection.execute(
+                    text(
+                        "SELECT "
+                        "current_database(), "
+                        "current_user"
+                    )
+                ).one()
+
         except SQLAlchemyError as error:
             raise PostgresGoldLoadError(
                 "Impossible de se connecter à PostgreSQL."
@@ -380,8 +392,10 @@ class PostgresGoldLoader:
     ) -> None:
         """Crée le schéma analytique si nécessaire."""
 
-        schema_identifier = self._quote_identifier(
-            self.schema_name
+        schema_identifier = (
+            self._quote_identifier(
+                self.schema_name
+            )
         )
 
         connection.execute(
@@ -398,7 +412,9 @@ class PostgresGoldLoader:
     ) -> bool:
         """Vérifie si une table existe déjà."""
 
-        return inspect(connection).has_table(
+        return inspect(
+            connection
+        ).has_table(
             table_name,
             schema=self.schema_name,
         )
@@ -408,7 +424,7 @@ class PostgresGoldLoader:
         connection: Connection,
         table_name: str,
     ) -> None:
-        """Vide une table existante transactionnellement."""
+        """Vide une table existante."""
 
         qualified_table = (
             self._qualified_table_name(
@@ -418,9 +434,152 @@ class PostgresGoldLoader:
 
         connection.execute(
             text(
-                f"TRUNCATE TABLE {qualified_table}"
+                f"TRUNCATE TABLE "
+                f"{qualified_table}"
             )
         )
+
+    def _create_empty_table(
+        self,
+        connection: Connection,
+        dataframe: pd.DataFrame,
+        table_name: str,
+    ) -> None:
+        """Crée uniquement la structure d'une nouvelle table."""
+
+        dataframe.head(0).to_sql(
+            name=table_name,
+            con=connection,
+            schema=self.schema_name,
+            if_exists="fail",
+            index=False,
+        )
+
+    def _index_names(
+        self,
+        table_name: str,
+    ) -> tuple[str, ...]:
+        """Retourne les index gérés par SmartLogix."""
+
+        configuration = (
+            GOLD_POSTGRES_TABLES[table_name]
+        )
+
+        secondary_indexes = tuple(
+            index_name
+            for (
+                index_name,
+                _,
+                _,
+            ) in configuration["indexes"]
+        )
+
+        return (
+            f"uq_{table_name}_key",
+            *secondary_indexes,
+        )
+
+    def _drop_indexes(
+        self,
+        connection: Connection,
+        table_name: str,
+    ) -> None:
+        """Supprime les index avant le chargement massif."""
+
+        for index_name in self._index_names(
+            table_name
+        ):
+            qualified_index = (
+                self._qualified_index_name(
+                    index_name
+                )
+            )
+
+            connection.execute(
+                text(
+                    f"DROP INDEX IF EXISTS "
+                    f"{qualified_index}"
+                )
+            )
+
+    def _copy_dataframe(
+        self,
+        connection: Connection,
+        dataframe: pd.DataFrame,
+        table_name: str,
+    ) -> None:
+        """Charge un DataFrame via COPY FROM STDIN."""
+
+        qualified_table = (
+            self._qualified_table_name(
+                table_name
+            )
+        )
+
+        quoted_columns = ", ".join(
+            self._quote_identifier(
+                str(column)
+            )
+            for column in dataframe.columns
+        )
+
+        copy_sql = (
+            f"COPY {qualified_table} "
+            f"({quoted_columns}) "
+            "FROM STDIN WITH ("
+            "FORMAT CSV, "
+            f"NULL '{COPY_NULL_SENTINEL}'"
+            ")"
+        )
+
+        dbapi_connection = (
+            connection.connection
+        )
+
+        try:
+            with dbapi_connection.cursor() as cursor, cursor.copy(
+                copy_sql
+            ) as copy:
+                for start in range(
+                    0,
+                    len(dataframe),
+                    self.chunksize,
+                ):
+                    stop = min(
+                        start + self.chunksize,
+                        len(dataframe),
+                    )
+
+                    chunk = dataframe.iloc[
+                        start:stop
+                    ]
+
+                    buffer = StringIO()
+
+                    chunk.to_csv(
+                        buffer,
+                        index=False,
+                        header=False,
+                        na_rep=COPY_NULL_SENTINEL,
+                        lineterminator="\n",
+                    )
+
+                    copy.write(
+                        buffer.getvalue().encode(
+                            "utf-8"
+                        )
+                    )
+
+        except (
+            PsycopgError,
+            AttributeError,
+            TypeError,
+            ValueError,
+        ) as error:
+            raise PostgresGoldLoadError(
+                "COPY PostgreSQL impossible pour "
+                f"{self.schema_name}.{table_name}."
+            ) from error
 
     def _write_dataframe(
         self,
@@ -429,26 +588,30 @@ class PostgresGoldLoader:
         table_name: str,
         table_exists: bool,
     ) -> None:
-        """Insère le DataFrame avec pandas et SQLAlchemy."""
+        """Prépare la table puis effectue le COPY."""
 
         if table_exists:
+            self._drop_indexes(
+                connection=connection,
+                table_name=table_name,
+            )
+
             self._truncate_table(
                 connection=connection,
                 table_name=table_name,
             )
 
-        dataframe.to_sql(
-            name=table_name,
-            con=connection,
-            schema=self.schema_name,
-            if_exists=(
-                "append"
-                if table_exists
-                else "fail"
-            ),
-            index=False,
-            chunksize=self.chunksize,
-            method="multi",
+        else:
+            self._create_empty_table(
+                connection=connection,
+                dataframe=dataframe,
+                table_name=table_name,
+            )
+
+        self._copy_dataframe(
+            connection=connection,
+            dataframe=dataframe,
+            table_name=table_name,
         )
 
     def _count_rows(
@@ -456,7 +619,7 @@ class PostgresGoldLoader:
         connection: Connection,
         table_name: str,
     ) -> int:
-        """Compte les lignes chargées dans PostgreSQL."""
+        """Compte les lignes chargées."""
 
         qualified_table = (
             self._qualified_table_name(
@@ -479,13 +642,15 @@ class PostgresGoldLoader:
         table_name: str,
         columns: tuple[str, ...],
     ) -> None:
-        """Crée l'index unique métier d'une table."""
+        """Crée l'index unique métier."""
 
         index_name = (
             f"uq_{table_name}_key"
         )
 
-        self._validate_identifier(index_name)
+        self._validate_identifier(
+            index_name
+        )
 
         quoted_columns = ", ".join(
             self._quote_identifier(column)
@@ -512,7 +677,7 @@ class PostgresGoldLoader:
         connection: Connection,
         table_name: str,
     ) -> None:
-        """Crée les index de consultation analytique."""
+        """Crée les index analytiques secondaires."""
 
         table_configuration = (
             GOLD_POSTGRES_TABLES[table_name]
@@ -523,7 +688,9 @@ class PostgresGoldLoader:
             columns,
             unique,
         ) in table_configuration["indexes"]:
-            self._validate_identifier(index_name)
+            self._validate_identifier(
+                index_name
+            )
 
             quoted_columns = ", ".join(
                 self._quote_identifier(column)
@@ -557,7 +724,7 @@ class PostgresGoldLoader:
         connection: Connection,
         table_name: str,
     ) -> None:
-        """Crée tous les index nécessaires."""
+        """Crée les index nécessaires."""
 
         table_configuration = (
             GOLD_POSTGRES_TABLES[table_name]
@@ -607,7 +774,9 @@ class PostgresGoldLoader:
     ) -> PostgresTableLoadResult:
         """Charge atomiquement une table Gold."""
 
-        self._validate_identifier(table_name)
+        self._validate_identifier(
+            table_name
+        )
 
         self._validate_dataframe(
             dataframe=dataframe,
@@ -615,27 +784,34 @@ class PostgresGoldLoader:
         )
 
         load_timestamp = (
-            loaded_at or datetime.now(UTC)
+            loaded_at
+            or datetime.now(UTC)
         )
 
         logger.info(
             "postgres_gold_table_load_started",
             schema_name=self.schema_name,
             table_name=table_name,
-            row_count=int(len(dataframe)),
+            row_count=int(
+                len(dataframe)
+            ),
             column_count=int(
                 len(dataframe.columns)
             ),
-            chunksize=self.chunksize,
+            copy_chunk_rows=self.chunksize,
         )
 
         try:
             with self.engine.begin() as connection:
-                self._ensure_schema(connection)
+                self._ensure_schema(
+                    connection
+                )
 
-                table_exists = self._table_exists(
-                    connection=connection,
-                    table_name=table_name,
+                table_exists = (
+                    self._table_exists(
+                        connection=connection,
+                        table_name=table_name,
+                    )
                 )
 
                 self._write_dataframe(
@@ -656,7 +832,7 @@ class PostgresGoldLoader:
                     dataframe
                 ):
                     raise PostgresGoldLoadError(
-                        f"Le nombre de lignes chargé dans "
+                        "Le nombre de lignes chargé dans "
                         f"{table_name} est incorrect : "
                         f"{loaded_row_count} au lieu de "
                         f"{len(dataframe)}."
@@ -677,6 +853,7 @@ class PostgresGoldLoader:
 
         except (
             SQLAlchemyError,
+            PsycopgError,
             ValueError,
             TypeError,
         ) as error:
@@ -688,7 +865,7 @@ class PostgresGoldLoader:
             )
 
             raise PostgresGoldLoadError(
-                f"Impossible de charger "
+                "Impossible de charger "
                 f"{self.schema_name}.{table_name}."
             ) from error
 
@@ -721,7 +898,8 @@ class PostgresGoldLoader:
         """Charge les trois tables analytiques Gold."""
 
         load_timestamp = (
-            loaded_at or datetime.now(UTC)
+            loaded_at
+            or datetime.now(UTC)
         )
 
         (
@@ -736,20 +914,14 @@ class PostgresGoldLoader:
         )
 
         courier_result = self.load_dataframe(
-            dataframe=(
-                courier_daily_performance
-            ),
-            table_name=(
-                "courier_daily_performance"
-            ),
+            dataframe=courier_daily_performance,
+            table_name="courier_daily_performance",
             loaded_at=load_timestamp,
         )
 
         city_result = self.load_dataframe(
             dataframe=city_daily_performance,
-            table_name=(
-                "city_daily_performance"
-            ),
+            table_name="city_daily_performance",
             loaded_at=load_timestamp,
         )
 
@@ -773,7 +945,9 @@ class PostgresGoldLoader:
         if self._owns_engine:
             self.engine.dispose()
 
-    def __enter__(self) -> PostgresGoldLoader:
+    def __enter__(
+        self,
+    ) -> PostgresGoldLoader:
         """Entre dans le contexte du chargeur."""
 
         return self
