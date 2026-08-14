@@ -263,6 +263,22 @@ def calculate_aggregate_order_total(
     )
 
 
+def calculate_courier_eligible_row_count(
+    parquet_path: Path,
+) -> int:
+    """Compte les livraisons attribuées à un coursier réel."""
+
+    dataframe = pd.read_parquet(
+        parquet_path,
+        engine="pyarrow",
+        columns=["courier_id"],
+    )
+
+    return int(
+        dataframe["courier_id"].gt(0).sum()
+    )
+
+
 def write_build_manifest(
     content: dict[str, Any],
     output_path: Path,
@@ -508,10 +524,20 @@ def main() -> int:
             )
         )
 
-        if courier_order_total != source_row_count:
+        courier_eligible_row_count = (
+            calculate_courier_eligible_row_count(
+                delivery_fact_path
+            )
+        )
+
+        if (
+            courier_order_total
+            != courier_eligible_row_count
+        ):
             raise LaDeGoldBuildError(
                 "La somme orders_total de la table coursier "
-                "ne correspond pas au nombre de livraisons."
+                "ne correspond pas au nombre de livraisons "
+                "avec courier_id > 0."
             )
 
         if city_order_total != source_row_count:
