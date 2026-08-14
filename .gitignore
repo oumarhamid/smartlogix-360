@@ -107,4 +107,4 @@ volumes/
 # Local Lakehouse generated data
 data/bronze/**
 data/silver/**
-data/gold/**
+data/gold/**dbt/smartlogix/.user.yml
