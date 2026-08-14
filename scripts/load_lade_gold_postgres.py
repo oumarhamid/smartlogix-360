@@ -333,6 +333,14 @@ def verify_loaded_tables(
                         "SELECT "
                         "COALESCE(SUM(delivery_count), 0) "
                         "AS deliveries_total, "
+                        "COALESCE("
+                        "SUM(delivery_count) FILTER "
+                        "(WHERE courier_id > 0), 0"
+                        ") AS courier_eligible_deliveries_total, "
+                        "COALESCE("
+                        "SUM(delivery_count) FILTER "
+                        "(WHERE courier_id = 0), 0"
+                        ") AS zero_courier_deliveries_total, "
                         "COUNT(*) FILTER "
                         "(WHERE is_valid_duration) "
                         "AS valid_duration_count, "
@@ -400,10 +408,37 @@ def verify_loaded_tables(
         ]
     )
 
-    if courier_orders_total != delivery_count:
+    courier_eligible_delivery_count = int(
+        global_kpi_row[
+            "courier_eligible_deliveries_total"
+        ]
+    )
+
+    zero_courier_delivery_count = int(
+        global_kpi_row[
+            "zero_courier_deliveries_total"
+        ]
+    )
+
+    if (
+        courier_eligible_delivery_count
+        + zero_courier_delivery_count
+        != delivery_count
+    ):
+        raise PostgresGoldLoadError(
+            "La décomposition des livraisons "
+            "selon courier_id ne correspond pas "
+            "à delivery_fact."
+        )
+
+    if (
+        courier_orders_total
+        != courier_eligible_delivery_count
+    ):
         raise PostgresGoldLoadError(
             "Le total des commandes par coursier "
-            "ne correspond pas à delivery_fact."
+            "ne correspond pas aux livraisons avec "
+            "courier_id > 0 dans delivery_fact."
         )
 
     if city_orders_total != delivery_count:
@@ -461,6 +496,7 @@ def write_load_manifest(
 
 
 def print_table_summary(
+    schema_name: str,
     table_name: str,
     source: dict[str, Any],
     verification: dict[str, Any],
@@ -469,7 +505,10 @@ def print_table_summary(
     """Affiche le résumé du chargement d'une table."""
 
     print()
-    print(f"Table                 : analytics.{table_name}")
+    print(
+        f"Table                 : "
+        f"{schema_name}.{table_name}"
+    )
     print(f"Source                : {source['path']}")
     print(f"Lignes source         : {source['row_count']}")
     print(
@@ -506,7 +545,10 @@ def print_summary(
 
     print()
     print("=" * 78)
-    print("SMARTLOGIX 360 - CHARGEMENT GOLD VERS POSTGRESQL")
+    print(
+        "SMARTLOGIX 360 - "
+        "CHARGEMENT GOLD VERS POSTGRESQL"
+    )
     print("=" * 78)
     print(f"Hôte PostgreSQL       : {database_host}")
     print(f"Port PostgreSQL       : {database_port}")
@@ -517,6 +559,7 @@ def print_summary(
 
     for table_name in GOLD_TABLE_FILES:
         print_table_summary(
+            schema_name=schema_name,
             table_name=table_name,
             source=sources[table_name],
             verification=(
@@ -543,6 +586,14 @@ def print_summary(
         f"{global_kpis['deliveries_total']}"
     )
     print(
+        "Avec courier_id > 0   : "
+        f"{global_kpis['courier_eligible_deliveries_total']}"
+    )
+    print(
+        "Avec courier_id = 0   : "
+        f"{global_kpis['zero_courier_deliveries_total']}"
+    )
+    print(
         "Durées valides        : "
         f"{global_kpis['valid_duration_count']}"
     )
@@ -561,6 +612,14 @@ def print_summary(
     print(
         "Alertes qualité       : "
         f"{global_kpis['quality_warning_count']}"
+    )
+    print(
+        "Agrégées par coursier : "
+        f"{verification['courier_orders_total']}"
+    )
+    print(
+        "Agrégées par ville    : "
+        f"{verification['city_orders_total']}"
     )
     print(f"Manifeste             : {manifest_path}")
     print("=" * 78)

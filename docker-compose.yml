@@ -11,7 +11,7 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
 
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
 
     volumes:
       - smartlogix-postgres-data:/var/lib/postgresql/data
@@ -26,6 +26,29 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+    networks:
+      - smartlogix-network
+
+  metabase:
+    image: metabase/metabase:v0.63.1.8
+    container_name: smartlogix-metabase
+    restart: unless-stopped
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: ${METABASE_DB_NAME}
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${METABASE_DB_USER}
+      MB_DB_PASS: ${METABASE_DB_PASSWORD}
+      MB_DB_HOST: postgres
+
+    ports:
+      - "${METABASE_PORT:-3000}:3000"
 
     networks:
       - smartlogix-network

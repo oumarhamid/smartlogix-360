@@ -24,7 +24,9 @@ models:
 
       - name: sla_compliance_rate
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                where: "orders_valid_duration > 0"
 
   - name: mart_courier_ranking
     description: Classement global des coursiers par ville.
