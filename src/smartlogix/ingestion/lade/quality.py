@@ -92,11 +92,6 @@ def _accept_gps_pair_is_consistent(
 def build_lade_delivery_schema() -> pa.DataFrameSchema:
     """Construit le contrat bloquant des livraisons LaDe."""
 
-    positive_integer = pa.Check(
-        lambda series: series > 0,
-        name="positive_integer",
-    )
-
     non_negative_integer = pa.Check(
         lambda series: series >= 0,
         name="non_negative_integer",
@@ -131,13 +126,13 @@ def build_lade_delivery_schema() -> pa.DataFrameSchema:
         columns={
             "order_id": pa.Column(
                 pa.Int64,
-                checks=positive_integer,
+                checks=non_negative_integer,
                 nullable=False,
                 coerce=True,
             ),
             "region_id": pa.Column(
                 pa.Int64,
-                checks=positive_integer,
+                checks=non_negative_integer,
                 nullable=False,
                 coerce=True,
             ),
@@ -149,7 +144,7 @@ def build_lade_delivery_schema() -> pa.DataFrameSchema:
             ),
             "courier_id": pa.Column(
                 pa.Int64,
-                checks=positive_integer,
+                checks=non_negative_integer,
                 nullable=False,
                 coerce=True,
             ),
@@ -502,6 +497,56 @@ class LaDeDeliveryQualityValidator:
         """Détecte les anomalies non bloquantes."""
 
         warnings: list[LaDeQualityWarning] = []
+
+        if "order_id" in dataframe.columns:
+            order_ids = pd.to_numeric(
+                dataframe["order_id"],
+                errors="coerce",
+            )
+
+            zero_order_id = order_ids.eq(0)
+
+            warning = self._build_warning(
+                dataframe=dataframe,
+                mask=zero_order_id,
+                rule="zero_order_id",
+                description=(
+                    "L'identifiant de commande vaut zéro. "
+                    "La ligne est conservée mais signalée "
+                    "comme anomalie qualité."
+                ),
+                columns=("order_id",),
+            )
+
+            if warning is not None:
+                warnings.append(warning)
+
+        if "courier_id" in dataframe.columns:
+            courier_ids = pd.to_numeric(
+                dataframe["courier_id"],
+                errors="coerce",
+            )
+
+            zero_courier_id = courier_ids.eq(0)
+
+            warning = self._build_warning(
+                dataframe=dataframe,
+                mask=zero_courier_id,
+                rule="zero_courier_id",
+                description=(
+                    "L'identifiant du coursier vaut zéro. "
+                    "La livraison est conservée mais le coursier "
+                    "est considéré comme inconnu."
+                ),
+                columns=(
+                    "order_id",
+                    "courier_id",
+                    "city",
+                ),
+            )
+
+            if warning is not None:
+                warnings.append(warning)
 
         required_accept_gps = {
             "accept_gps_lng",

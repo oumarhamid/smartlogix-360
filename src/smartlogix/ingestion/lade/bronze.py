@@ -22,6 +22,8 @@ class LaDeBronzeBuildError(RuntimeError):
 
 
 BRONZE_WARNING_COLUMNS = {
+    "zero_order_id": "_warning_zero_order_id",
+    "zero_courier_id": "_warning_zero_courier_id",
     "missing_accept_gps": "_warning_missing_accept_gps",
     "near_zero_accept_gps": "_warning_near_zero_accept_gps",
     "near_zero_delivery_gps": "_warning_near_zero_delivery_gps",

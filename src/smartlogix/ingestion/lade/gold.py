@@ -482,8 +482,12 @@ class LaDeGoldBuilder:
     ) -> pd.DataFrame:
         """Agrège les indicateurs quotidiens par coursier."""
 
+        courier_fact = delivery_fact.loc[
+            delivery_fact["courier_id"].gt(0)
+        ].copy()
+
         grouped = (
-            delivery_fact.groupby(
+            courier_fact.groupby(
                 [
                     "delivery_date",
                     "region_id",
@@ -680,7 +684,11 @@ class LaDeGoldBuilder:
                 ),
                 unique_couriers=(
                     "courier_id",
-                    "nunique",
+                    lambda series: int(
+                        series[
+                            series.gt(0)
+                        ].nunique()
+                    ),
                 ),
                 unique_aois=(
                     "aoi_id",
