@@ -19,7 +19,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: >-
       http://airflow-api-server:8080/execution/
 
-    # Secret JWT commun Ã  tous les composants Airflow.
+    # Secret JWT commun ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â  tous les composants Airflow.
     AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET}
 
     # Plus confortable pour notre environnement Docker local.
@@ -50,14 +50,27 @@ x-airflow-common: &airflow-common
 
 
 x-spark-common: &spark-common
-  image: apache/spark:4.2.0-python3
+  image: smartlogix-spark:4.2.0
+  build:
+    context: .
+    dockerfile: streaming/spark/Dockerfile
   profiles:
     - streaming
   restart: unless-stopped
+  environment:
+    PYTHONPATH: /opt/smartlogix/src
+    POSTGRES_HOST: postgres
+    POSTGRES_PORT: "5432"
+    POSTGRES_DATABASE: ${POSTGRES_DATABASE}
+    POSTGRES_USER: ${POSTGRES_USER}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    REALTIME_POSTGRES_SCHEMA: ${REALTIME_POSTGRES_SCHEMA:-realtime}
+    STREAMING_QUERY_NAME: ${STREAMING_QUERY_NAME:-smartlogix-delivery-postgres}
   networks:
     - smartlogix-network
   volumes:
     - ./:/opt/smartlogix
+    - smartlogix-spark-ivy:/opt/spark/.ivy2.5.2
   working_dir: /opt/smartlogix
 
 
@@ -353,6 +366,9 @@ volumes:
 
   smartlogix-kafka-data:
     name: smartlogix-kafka-data
+
+  smartlogix-spark-ivy:
+    name: smartlogix-spark-ivy
 
 
 networks:
