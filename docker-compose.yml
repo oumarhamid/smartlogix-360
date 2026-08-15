@@ -283,6 +283,14 @@ services:
           --bootstrap-server kafka:19092 \
           --create \
           --if-not-exists \
+          --topic "${KAFKA_DELIVERY_FEATURES_TOPIC:-smartlogix.delivery.features}" \
+          --partitions "${KAFKA_TOPIC_PARTITIONS:-3}" \
+          --replication-factor 1
+
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka:19092 \
+          --create \
+          --if-not-exists \
           --topic "${KAFKA_DELIVERY_ALERTS_TOPIC:-smartlogix.delivery.alerts}" \
           --partitions "${KAFKA_TOPIC_PARTITIONS:-3}" \
           --replication-factor 1
