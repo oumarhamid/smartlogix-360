@@ -112,3 +112,6 @@ data/ml_train.csv
 data/ml_validation.csv
 data/ml_train.sql
 data/ml_validation.sql
+data/ml_test.csv
+data/ml_test.sql
+data/ml_lightgbm_test_results.json
