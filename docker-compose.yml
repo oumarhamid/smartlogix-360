@@ -388,6 +388,86 @@ services:
       start_period: 20s
 
 
+  accepted-feature-stream:
+    <<: *spark-common
+    container_name: smartlogix-accepted-feature-stream
+    hostname: accepted-feature-stream
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      spark-master:
+        condition: service_healthy
+
+    command:
+      - /opt/spark/bin/spark-submit
+      - --master
+      - spark://spark-master:7077
+      - --packages
+      - org.postgresql:postgresql:42.7.13,org.apache.spark:spark-sql-kafka-0-10_2.13:4.2.0
+      - --conf
+      - spark.driver.host=accepted-feature-stream
+      - --conf
+      - spark.driver.bindAddress=0.0.0.0
+      - streaming/spark/accepted_feature_stream_job.py
+      - --starting-offsets
+      - latest
+
+
+  ml-inference:
+    image: smartlogix-ml-inference:1.0.0
+
+    build:
+      context: .
+      dockerfile: streaming/inference/Dockerfile
+
+    profiles:
+      - streaming
+
+    container_name: smartlogix-ml-inference
+    restart: unless-stopped
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      accepted-feature-stream:
+        condition: service_started
+
+    environment:
+      PYTHONPATH: /opt/smartlogix/src
+
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REALTIME_POSTGRES_SCHEMA: ${REALTIME_POSTGRES_SCHEMA:-realtime}
+
+      KAFKA_INTERNAL_BOOTSTRAP_SERVERS: kafka:19092
+      KAFKA_DELIVERY_FEATURES_TOPIC: ${KAFKA_DELIVERY_FEATURES_TOPIC:-smartlogix.delivery.features}
+      KAFKA_DELIVERY_PREDICTIONS_TOPIC: ${KAFKA_DELIVERY_PREDICTIONS_TOPIC:-smartlogix.delivery.predictions}
+      KAFKA_DELIVERY_ALERTS_TOPIC: ${KAFKA_DELIVERY_ALERTS_TOPIC:-smartlogix.delivery.alerts}
+      KAFKA_DEAD_LETTER_TOPIC: ${KAFKA_DEAD_LETTER_TOPIC:-smartlogix.delivery.dead-letter}
+
+    networks:
+      - smartlogix-network
+
+    volumes:
+      - ./:/opt/smartlogix
+
+    working_dir: /opt/smartlogix
+
+    command:
+      - python
+      - streaming/inference/delay_inference_consumer.py
+      - --bootstrap-servers
+      - kafka:19092
+
+
 volumes:
   smartlogix-postgres-data:
     name: smartlogix-postgres-data
