@@ -18,13 +18,19 @@ from smartlogix.ml.artifact import (
     load_model_artifact,
     predict_delay_risk,
 )
+from smartlogix.streaming.postgres_sink import RealtimePostgresConfig
+from smartlogix.streaming.prediction_sink import (
+    build_delay_alert,
+    initialize_prediction_schema,
+    persist_prediction_and_alert,
+)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Consomme les features temps reel SmartLogix "
-            "et produit les predictions LightGBM."
+            "Consomme les features temps reel SmartLogix, "
+            "produit les predictions LightGBM et les persiste."
         )
     )
 
@@ -49,6 +55,14 @@ def parse_args() -> argparse.Namespace:
         default=os.getenv(
             "KAFKA_DELIVERY_PREDICTIONS_TOPIC",
             "smartlogix.delivery.predictions",
+        ),
+    )
+
+    parser.add_argument(
+        "--alert-topic",
+        default=os.getenv(
+            "KAFKA_DELIVERY_ALERTS_TOPIC",
+            "smartlogix.delivery.alerts",
         ),
     )
 
@@ -239,6 +253,16 @@ def build_dead_letter_payload(
     }
 
 
+def commit_message(
+    consumer: Consumer,
+    message: Any,
+) -> None:
+    consumer.commit(
+        message=message,
+        asynchronous=False,
+    )
+
+
 def main() -> int:
     args = parse_args()
 
@@ -251,12 +275,27 @@ def main() -> int:
         args.artifact_path
     )
 
+    postgres_config = (
+        RealtimePostgresConfig.from_env()
+    )
+
+    initialize_prediction_schema(
+        postgres_config
+    )
+
     print(
         "MODEL_READY "
         f"name={artifact.metadata.model_name} "
         f"version={artifact.metadata.model_version} "
         f"threshold={artifact.metadata.threshold:.6f} "
         f"features={artifact.metadata.feature_count}"
+    )
+
+    print(
+        "POSTGRES_READY "
+        f"host={postgres_config.host} "
+        f"database={postgres_config.database} "
+        f"schema={postgres_config.schema}"
     )
 
     consumer = Consumer(
@@ -291,11 +330,15 @@ def main() -> int:
     processed = 0
     predicted_late_count = 0
     dead_letter_count = 0
+    prediction_inserted_count = 0
+    alert_inserted_count = 0
+    alert_published_count = 0
 
     print(
         "INFERENCE_STARTED "
         f"input={args.input_topic} "
         f"output={args.output_topic} "
+        f"alerts={args.alert_topic} "
         f"group={args.group_id}"
     )
 
@@ -315,6 +358,7 @@ def main() -> int:
                         "avant expiration du delai."
                     )
                     break
+
                 continue
 
             if message.error():
@@ -342,27 +386,8 @@ def main() -> int:
                     )
                 )
 
-                produce_sync(
-                    producer,
-                    topic=args.output_topic,
-                    key=prediction[
-                        "prediction_id"
-                    ],
-                    payload=prediction,
-                )
-
-                predicted_late_count += int(
-                    prediction["predicted_late"]
-                )
-
-                print(
-                    "PREDICTION "
-                    f"order_id="
-                    f"{prediction['order_id']} "
-                    f"probability="
-                    f"{prediction['delay_probability']:.4f} "
-                    f"late="
-                    f"{prediction['predicted_late']}"
+                alert = build_delay_alert(
+                    prediction
                 )
 
             except Exception as error:
@@ -397,12 +422,73 @@ def main() -> int:
                     f"error={error}"
                 )
 
-            consumer.commit(
-                message=message,
-                asynchronous=False,
+                commit_message(
+                    consumer,
+                    message,
+                )
+
+                processed += 1
+                continue
+
+            persist_result = (
+                persist_prediction_and_alert(
+                    postgres_config,
+                    prediction,
+                    alert,
+                )
+            )
+
+            produce_sync(
+                producer,
+                topic=args.output_topic,
+                key=prediction["prediction_id"],
+                payload=prediction,
+            )
+
+            if alert is not None:
+                produce_sync(
+                    producer,
+                    topic=args.alert_topic,
+                    key=alert["alert_id"],
+                    payload=alert,
+                )
+
+                alert_published_count += 1
+
+            commit_message(
+                consumer,
+                message,
             )
 
             processed += 1
+
+            predicted_late_count += int(
+                prediction["predicted_late"]
+            )
+
+            prediction_inserted_count += int(
+                persist_result.prediction_inserted
+            )
+
+            alert_inserted_count += int(
+                persist_result.alert_inserted
+            )
+
+            print(
+                "PREDICTION "
+                f"order_id="
+                f"{prediction['order_id']} "
+                f"probability="
+                f"{prediction['delay_probability']:.4f} "
+                f"late="
+                f"{prediction['predicted_late']} "
+                f"pg_inserted="
+                f"{persist_result.prediction_inserted} "
+                f"latest_updated="
+                f"{persist_result.latest_updated} "
+                f"alert_inserted="
+                f"{persist_result.alert_inserted}"
+            )
 
     finally:
         producer.flush(10)
@@ -413,6 +499,12 @@ def main() -> int:
         f"processed={processed} "
         f"predicted_late="
         f"{predicted_late_count} "
+        f"prediction_inserted="
+        f"{prediction_inserted_count} "
+        f"alert_inserted="
+        f"{alert_inserted_count} "
+        f"alert_published="
+        f"{alert_published_count} "
         f"dead_letter={dead_letter_count}"
     )
 
