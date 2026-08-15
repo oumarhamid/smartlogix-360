@@ -16,3 +16,5 @@ huggingface-hub
 sqlalchemy>=2.0,<3.0
 psycopg[binary]>=3.2,<4.0
 dbt-postgres==1.11.0scikit-learn
+xgboost
+lightgbm

@@ -108,3 +108,7 @@ volumes/
 *.tmp
 *.temp
 *.bak
+data/ml_train.csv
+data/ml_validation.csv
+data/ml_train.sql
+data/ml_validation.sql
