@@ -57,7 +57,9 @@ x-spark-common: &spark-common
   profiles:
     - streaming
   restart: unless-stopped
-  environment:
+  environment: &spark-environment
+    HOME: /opt/spark
+    SPARK_SUBMIT_OPTS: "-Duser.home=/opt/spark"
     PYTHONPATH: /opt/smartlogix/src
     POSTGRES_HOST: postgres
     POSTGRES_PORT: "5432"
@@ -312,6 +314,7 @@ services:
       - org.apache.spark.deploy.master.Master
 
     environment:
+      <<: *spark-environment
       SPARK_NO_DAEMONIZE: "true"
       SPARK_MASTER_HOST: spark-master
       SPARK_MASTER_PORT: "7077"
@@ -348,6 +351,7 @@ services:
       - spark://spark-master:7077
 
     environment:
+      <<: *spark-environment
       SPARK_NO_DAEMONIZE: "true"
       SPARK_WORKER_CORES: "${SPARK_WORKER_CORES:-1}"
       SPARK_WORKER_MEMORY: "${SPARK_WORKER_MEMORY:-1g}"
