@@ -8,3 +8,4 @@ mypy
 pre-commit
 types-PyYAML
 types-requests
+httpx2

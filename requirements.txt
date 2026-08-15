@@ -15,7 +15,11 @@ tqdm
 huggingface-hub
 sqlalchemy>=2.0,<3.0
 psycopg[binary]>=3.2,<4.0
-dbt-postgres==1.11.0scikit-learn
+dbt-postgres==1.11.0
+scikit-learn
 xgboost
 lightgbm
 joblib
+
+fastapi
+uvicorn[standard]
