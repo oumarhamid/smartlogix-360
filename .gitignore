@@ -115,3 +115,4 @@ data/ml_validation.sql
 data/ml_test.csv
 data/ml_test.sql
 data/ml_lightgbm_test_results.json
+artifacts/ml/*.joblib

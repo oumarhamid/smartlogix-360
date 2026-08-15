@@ -18,3 +18,4 @@ psycopg[binary]>=3.2,<4.0
 dbt-postgres==1.11.0scikit-learn
 xgboost
 lightgbm
+joblib

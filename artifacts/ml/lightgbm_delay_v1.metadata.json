@@ -1,0 +1,19 @@
+{
+  "model_name": "lightgbm",
+  "model_version": "lightgbm-delay-v1",
+  "threshold": 0.246906,
+  "training_rows": 148963,
+  "training_late_rate": 0.16204023817995072,
+  "feature_count": 26,
+  "training_splits": [
+    "train",
+    "validation"
+  ],
+  "test_used_for_training": false,
+  "python_version": "3.11.9",
+  "sklearn_version": "1.9.0",
+  "lightgbm_version": "4.7.0",
+  "artifact_file": "lightgbm_delay_v1.joblib",
+  "artifact_sha256": "617b8693ae54d195b2a50a56664d7d50b95516d5b84ae31177fe8831667a3d12",
+  "artifact_size_bytes": 372949
+}
