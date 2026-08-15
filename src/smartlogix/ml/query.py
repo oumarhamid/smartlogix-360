@@ -18,13 +18,8 @@ ENRICHED_MODEL_FEATURE_COLUMNS = (
 )
 
 
-def build_enriched_dataset_sql(limit: int | None = None) -> str:
-    """Construit le dataset ML enrichi avec les features historiques J-1."""
-
-    if limit is not None and limit <= 0:
-        raise ValueError("limit must be strictly positive")
-
-    limit_sql = f"\nLIMIT {limit}" if limit is not None else ""
+def build_enriched_select_sql() -> str:
+    """Construit le SELECT enrichi sans tri ni limite."""
 
     return f"""
 SELECT
@@ -34,5 +29,18 @@ SELECT
 FROM {SOURCE_TABLE} AS d
 {build_historical_feature_join_sql("d")}
 WHERE {ELIGIBILITY_SQL}
+""".strip()
+
+
+def build_enriched_dataset_sql(limit: int | None = None) -> str:
+    """Construit le dataset ML enrichi avec les features historiques J-1."""
+
+    if limit is not None and limit <= 0:
+        raise ValueError("limit must be strictly positive")
+
+    limit_sql = f"\nLIMIT {limit}" if limit is not None else ""
+
+    return f"""
+{build_enriched_select_sql()}
 ORDER BY d.accept_timestamp, d.order_id{limit_sql};
 """.strip()
