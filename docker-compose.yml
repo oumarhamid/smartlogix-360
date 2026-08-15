@@ -19,7 +19,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: >-
       http://airflow-api-server:8080/execution/
 
-    # Secret JWT commun ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â  tous les composants Airflow.
+    # Secret JWT commun ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â  tous les composants Airflow.
     AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET}
 
     # Plus confortable pour notre environnement Docker local.
@@ -266,6 +266,14 @@ services:
           --create \
           --if-not-exists \
           --topic "${KAFKA_DELIVERY_EVENTS_TOPIC:-smartlogix.delivery.events}" \
+          --partitions "${KAFKA_TOPIC_PARTITIONS:-3}" \
+          --replication-factor 1
+
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka:19092 \
+          --create \
+          --if-not-exists \
+          --topic "${KAFKA_DELIVERY_ACCEPTED_TOPIC:-smartlogix.delivery.accepted}" \
           --partitions "${KAFKA_TOPIC_PARTITIONS:-3}" \
           --replication-factor 1
 
