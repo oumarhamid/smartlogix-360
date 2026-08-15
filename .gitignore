@@ -1,10 +1,10 @@
-@'
 # Python
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 *.so
+*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -28,7 +28,7 @@ secrets/
 .vscode/
 .idea/
 
-# Système
+# Systeme
 .DS_Store
 Thumbs.db
 desktop.ini
@@ -38,14 +38,18 @@ desktop.ini
 logs/**
 !logs/.gitkeep
 
-# Données locales et volumineuses
+# Donnees locales et volumineuses
 data/raw/**
 data/generated/**
 data/processed/**
 data/quarantine/**
 data/samples/**
+data/bronze/**
+data/silver/**
+data/gold/**
+data/checkpoints/**
 
-# Conserver les fichiers .gitkeep
+# Conserver les fichiers .gitkeep utiles
 !data/raw/**/
 !data/raw/**/.gitkeep
 !data/generated/**/
@@ -56,6 +60,8 @@ data/samples/**
 !data/quarantine/**/.gitkeep
 !data/samples/**/
 !data/samples/**/.gitkeep
+!data/checkpoints/**/
+!data/checkpoints/**/.gitkeep
 
 # Spark
 spark-warehouse/
@@ -75,6 +81,7 @@ airflow/webserver_config.py
 dbt/**/target/
 dbt/**/logs/
 dbt/**/dbt_packages/
+dbt/smartlogix/.user.yml
 
 # Java / Spring Boot
 spring-api/target/
@@ -101,10 +108,3 @@ volumes/
 *.tmp
 *.temp
 *.bak
-'@ | Set-Content -Path .gitignore -Encoding utf8
-# Python package metadata
-*.egg-info/
-# Local Lakehouse generated data
-data/bronze/**
-data/silver/**
-data/gold/**dbt/smartlogix/.user.yml

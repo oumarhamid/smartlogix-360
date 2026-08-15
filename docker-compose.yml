@@ -13,14 +13,13 @@ x-airflow-common: &airflow-common
 
     AIRFLOW__CORE__LOAD_EXAMPLES: "False"
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "True"
-
     AIRFLOW__CORE__PARALLELISM: "2"
     AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "2"
 
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: >-
       http://airflow-api-server:8080/execution/
 
-    # Secret JWT commun à tous les composants Airflow.
+    # Secret JWT commun Ã  tous les composants Airflow.
     AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET}
 
     # Plus confortable pour notre environnement Docker local.
@@ -28,7 +27,6 @@ x-airflow-common: &airflow-common
 
     AIRFLOW__API__BASE_URL: >-
       http://localhost:${AIRFLOW_PORT:-8080}
-
     AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "True"
 
     POSTGRES_HOST: postgres
@@ -47,9 +45,20 @@ x-airflow-common: &airflow-common
     - ./airflow/config:/opt/airflow/config
 
   working_dir: /opt/smartlogix
-
   networks:
     - smartlogix-network
+
+
+x-spark-common: &spark-common
+  image: apache/spark:4.2.0-python3
+  profiles:
+    - streaming
+  restart: unless-stopped
+  networks:
+    - smartlogix-network
+  volumes:
+    - ./:/opt/smartlogix
+  working_dir: /opt/smartlogix
 
 
 services:
@@ -70,7 +79,6 @@ services:
 
     volumes:
       - smartlogix-postgres-data:/var/lib/postgresql/data
-
     healthcheck:
       test:
         [
@@ -94,7 +102,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-
     environment:
       MB_DB_TYPE: postgres
       MB_DB_DBNAME: ${METABASE_DB_NAME}
@@ -121,7 +128,6 @@ services:
 
     command: db migrate
 
-
   airflow-api-server:
     <<: *airflow-common
     container_name: smartlogix-airflow-api-server
@@ -136,17 +142,27 @@ services:
     ports:
       - "${AIRFLOW_PORT:-8080}:8080"
 
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/api/v2/monitor/health', timeout=5).read()\"",
+        ]
+      interval: 10s
+      timeout: 7s
+      retries: 12
+      start_period: 30s
+
 
   airflow-scheduler:
     <<: *airflow-common
     container_name: smartlogix-airflow-scheduler
     restart: unless-stopped
-
     depends_on:
       airflow-init:
         condition: service_completed_successfully
       airflow-api-server:
-        condition: service_started
+        condition: service_healthy
 
     command: scheduler
 
@@ -163,9 +179,180 @@ services:
     command: dag-processor
 
 
+  kafka:
+    image: apache/kafka:4.3.1
+    container_name: smartlogix-kafka
+    hostname: kafka
+    profiles:
+      - streaming
+    restart: unless-stopped
+
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: >-
+        CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: >-
+        PLAINTEXT_HOST://localhost:9092,PLAINTEXT://kafka:19092
+      KAFKA_LISTENERS: >-
+        CONTROLLER://:29093,PLAINTEXT_HOST://:9092,PLAINTEXT://:19092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:29093"
+      CLUSTER_ID: "${KAFKA_CLUSTER_ID:-4L6g3nShT-eMCtK--X86sw}"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: "1"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: >-
+        -Xms${KAFKA_HEAP_MIN:-256M} -Xmx${KAFKA_HEAP_MAX:-512M}
+
+    volumes:
+      - smartlogix-kafka-data:/var/lib/kafka/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+    networks:
+      - smartlogix-network
+
+
+  kafka-init:
+    image: apache/kafka:4.3.1
+    container_name: smartlogix-kafka-init
+    profiles:
+      - streaming
+    restart: "no"
+
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+    command:
+      - /bin/bash
+      - -c
+      - |
+        set -euo pipefail
+
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka:19092 \
+          --create \
+          --if-not-exists \
+          --topic "${KAFKA_DELIVERY_EVENTS_TOPIC:-smartlogix.delivery.events}" \
+          --partitions "${KAFKA_TOPIC_PARTITIONS:-3}" \
+          --replication-factor 1
+
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka:19092 \
+          --create \
+          --if-not-exists \
+          --topic "${KAFKA_DELIVERY_ALERTS_TOPIC:-smartlogix.delivery.alerts}" \
+          --partitions "${KAFKA_TOPIC_PARTITIONS:-3}" \
+          --replication-factor 1
+
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka:19092 \
+          --create \
+          --if-not-exists \
+          --topic "${KAFKA_DEAD_LETTER_TOPIC:-smartlogix.delivery.dead-letter}" \
+          --partitions "${KAFKA_TOPIC_PARTITIONS:-3}" \
+          --replication-factor 1
+
+        echo "SmartLogix Kafka topics ready."
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka:19092 \
+          --list
+
+    networks:
+      - smartlogix-network
+
+
+  spark-master:
+    <<: *spark-common
+    container_name: smartlogix-spark-master
+    hostname: spark-master
+
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.master.Master
+
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_MASTER_HOST: spark-master
+      SPARK_MASTER_PORT: "7077"
+      SPARK_MASTER_WEBUI_PORT: "8080"
+
+    ports:
+      - "${SPARK_MASTER_PORT:-7077}:7077"
+      - "${SPARK_MASTER_UI_PORT:-8081}:8080"
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python3 -c \"import socket; s=socket.create_connection(('spark-master', 7077), 3); s.close()\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+
+  spark-worker:
+    <<: *spark-common
+    container_name: smartlogix-spark-worker
+    hostname: spark-worker
+
+    depends_on:
+      spark-master:
+        condition: service_healthy
+
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_WORKER_CORES: "${SPARK_WORKER_CORES:-1}"
+      SPARK_WORKER_MEMORY: "${SPARK_WORKER_MEMORY:-1g}"
+      SPARK_WORKER_WEBUI_PORT: "8081"
+
+    ports:
+      - "${SPARK_WORKER_UI_PORT:-8082}:8081"
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python3 -c \"import socket; s=socket.create_connection(('localhost', 8081), 3); s.close()\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+
 volumes:
   smartlogix-postgres-data:
     name: smartlogix-postgres-data
+
+  smartlogix-kafka-data:
+    name: smartlogix-kafka-data
 
 
 networks:
