@@ -7,12 +7,17 @@ from typing import Any
 import joblib
 import pandas as pd
 
+from smartlogix.ml.constants import (
+    FINAL_MODEL_NAME as FINAL_MODEL_NAME,
+)
+from smartlogix.ml.constants import (
+    FINAL_MODEL_VERSION as FINAL_MODEL_VERSION,
+)
+from smartlogix.ml.constants import (
+    FINAL_THRESHOLD as FINAL_THRESHOLD,
+)
 from smartlogix.ml.preprocessing import MODEL_INPUT_COLUMNS
 from smartlogix.ml.threshold import apply_threshold
-
-FINAL_MODEL_NAME = "lightgbm"
-FINAL_MODEL_VERSION = "lightgbm-delay-v1"
-FINAL_THRESHOLD = 0.246906
 
 DEFAULT_ARTIFACT_PATH = Path(
     "artifacts/ml/lightgbm_delay_v1.joblib"

@@ -467,7 +467,46 @@ services:
       - --bootstrap-servers
       - kafka:19092
 
+  digital-twin-api:
+    image: smartlogix-digital-twin-api:1.0.0
 
+    build:
+      context: .
+      dockerfile: infrastructure/digital-twin-api/Dockerfile
+
+    container_name: smartlogix-digital-twin-api
+    restart: unless-stopped
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REALTIME_POSTGRES_SCHEMA: ${REALTIME_POSTGRES_SCHEMA:-realtime}
+
+    ports:
+      - "${DIGITAL_TWIN_API_PORT:-8000}:8000"
+
+    networks:
+      - smartlogix-network
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 volumes:
   smartlogix-postgres-data:
     name: smartlogix-postgres-data

@@ -14,7 +14,7 @@ from smartlogix.digital_twin.models import (
     ObservedDeliveryState,
     TwinOrderState,
 )
-from smartlogix.ml.artifact import FINAL_MODEL_VERSION
+from smartlogix.ml.constants import FINAL_MODEL_VERSION
 from smartlogix.streaming.postgres_sink import (
     RealtimePostgresConfig,
 )
